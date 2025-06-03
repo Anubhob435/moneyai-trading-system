@@ -1,0 +1,15 @@
+fastapi
+uvicorn[standard]
+websockets
+psycopg2-binary
+sqlalchemy
+pydantic
+python-dotenv
+boto3
+celery
+redis
+pandas
+python-multipart
+asyncpg
+alembic
+requests

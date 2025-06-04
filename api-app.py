@@ -148,7 +148,13 @@ async def root():
             "trades": "/trades/",
             "websocket": "ws://localhost:8000/ws",
             "analytics": "/analytics/",
-            "health": "/health"
+            "health": "/health",
+            "algorithm": {
+                "run": "/algorithm/run",
+                "sample": "/algorithm/sample", 
+                "help": "/algorithm/help"
+            },
+            "moneyai_lambda": "/moneyai"
         }
     }
 
@@ -394,14 +400,16 @@ async def websocket_endpoint(websocket: WebSocket):
                 while True:
                     msg = await backend_ws.recv()
                     await websocket.send_text(msg)
-            # Run both directions concurrently
-            await asyncio.gather(to_backend(), from_backend())
+            # Run both directions concurrently            await asyncio.gather(to_backend(), from_backend())
     except WebSocketDisconnect:
         pass
     except Exception as e:
         await websocket.close()
 
-LAMBDA_API_URL = "https://hibjr4191a.execute-api.eu-north-1.amazonaws.com/default/moneyai"
+# Lambda API configuration
+LAMBDA_API_URL = os.getenv('LAMBDA_API_URL')
+if not LAMBDA_API_URL:
+    raise ValueError("LAMBDA_API_URL environment variable is required")
 
 @app.post("/moneyai")
 async def proxy_to_lambda(request_data: LambdaRequest):

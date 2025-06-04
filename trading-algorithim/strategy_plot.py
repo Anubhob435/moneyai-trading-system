@@ -3,60 +3,64 @@ import matplotlib.pyplot as plt
 
 def simulate_strategy_with_plot(csv_path):
     df = pd.read_csv(csv_path, parse_dates=["date"])
-    df.sort_values("date", inplace=True)
+    df.sort_values(["ticker", "date"], inplace=True)
 
-    df["50ma"] = df["close"].rolling(window=50).mean()
-    df["200ma"] = df["close"].rolling(window=200).mean()
+    tickers = df["ticker"].unique()
 
-    position = None
-    buy_signals = []
-    sell_signals = []
+    for ticker in tickers:
+        stock_df = df[df["ticker"] == ticker].copy()
 
-    for i in range(1, len(df)):
-        today = df.iloc[i]
-        yesterday = df.iloc[i - 1]
+        stock_df["50ma"] = stock_df["close"].rolling(window=50).mean()
+        stock_df["200ma"] = stock_df["close"].rolling(window=200).mean()
 
-        # Buy Signal
-        if (
-            yesterday["50ma"] < yesterday["200ma"]
-            and today["50ma"] >= today["200ma"]
-            and position is None
-        ):
-            buy_signals.append((today["date"], today["close"]))
-            position = "LONG"
+        position = None
+        buy_signals = []
+        sell_signals = []
 
-        # Sell Signal
-        elif (
-            yesterday["50ma"] > yesterday["200ma"]
-            and today["50ma"] <= today["200ma"]
-            and position == "LONG"
-        ):
-            sell_signals.append((today["date"], today["close"]))
-            position = None
+        for i in range(1, len(stock_df)):
+            today = stock_df.iloc[i]
+            yesterday = stock_df.iloc[i - 1]
 
-    # Plotting
-    plt.figure(figsize=(14, 7))
-    plt.plot(df["date"], df["close"], label="Close Price", color="gray", alpha=0.5)
-    plt.plot(df["date"], df["50ma"], label="50-Day MA", color="blue")
-    plt.plot(df["date"], df["200ma"], label="200-Day MA", color="orange")
+            # Buy Signal
+            if (
+                yesterday["50ma"] < yesterday["200ma"]
+                and today["50ma"] >= today["200ma"]
+                and position is None
+            ):
+                buy_signals.append((today["date"], today["close"]))
+                position = "LONG"
 
-    # Buy/Sell Markers
-    if buy_signals:
-        buy_dates, buy_prices = zip(*buy_signals)
-        plt.scatter(buy_dates, buy_prices, marker="^", color="green", label="Buy", s=100)
+            # Sell Signal
+            elif (
+                yesterday["50ma"] > yesterday["200ma"]
+                and today["50ma"] <= today["200ma"]
+                and position == "LONG"
+            ):
+                sell_signals.append((today["date"], today["close"]))
+                position = None
 
-    if sell_signals:
-        sell_dates, sell_prices = zip(*sell_signals)
-        plt.scatter(sell_dates, sell_prices, marker="v", color="red", label="Sell", s=100)
+        # Plotting for the current ticker
+        plt.figure(figsize=(14, 7))
+        plt.plot(stock_df["date"], stock_df["close"], label="Close Price", color="gray", alpha=0.5)
+        plt.plot(stock_df["date"], stock_df["50ma"], label="50-Day MA", color="blue")
+        plt.plot(stock_df["date"], stock_df["200ma"], label="200-Day MA", color="orange")
 
-    plt.title("Moving Average Crossover Strategy")
-    plt.xlabel("Date")
-    plt.ylabel("Price")
-    plt.legend()
-    plt.grid(True)
-    plt.tight_layout()
-    plt.show()
+        if buy_signals:
+            buy_dates, buy_prices = zip(*buy_signals)
+            plt.scatter(buy_dates, buy_prices, marker="^", color="green", label="Buy", s=100)
+
+        if sell_signals:
+            sell_dates, sell_prices = zip(*sell_signals)
+            plt.scatter(sell_dates, sell_prices, marker="v", color="red", label="Sell", s=100)
+
+        plt.title(f"Moving Average Crossover Strategy - {ticker}")
+        plt.xlabel("Date")
+        plt.ylabel("Price")
+        plt.legend()
+        plt.grid(True)
+        plt.tight_layout()
+        plt.show()
 
 # Run this after generating CSV
 if __name__ == "__main__":
-    simulate_strategy_with_plot("historical_prices.csv")
+    simulate_strategy_with_plot("multi_ticker_data.csv")

@@ -1,19 +1,32 @@
 import pandas as pd
 import numpy as np
+import random
+from datetime import datetime, timedelta
 
-def generate_sample_stock_data(filename="historical_prices.csv", days=300):
+def generate_multi_ticker_data(filename="multi_ticker_data.csv", days=300):
     np.random.seed(42)
-    dates = pd.date_range(end=pd.Timestamp.today(), periods=days)
-    prices = np.cumsum(np.random.normal(0, 2, size=days)) + 150  # Random walk around 150
+    tickers = ["AAPL", "GOOGL", "MSFT", "TSLA", "AMZN", "META", "NFLX", "AMD", "INTC"]
+    start_date = datetime.today() - timedelta(days=days)
 
-    df = pd.DataFrame({
-        "date": dates,
-        "close": prices
-    })
+    all_data = []
 
+    for ticker in tickers:
+        price = random.uniform(100, 300)  # Starting price per ticker
+
+        for i in range(days):
+            date = start_date + timedelta(days=i)
+            change = np.random.normal(0, 2)
+            price = max(price + change, 1)  # Price should be positive
+            all_data.append({
+                "date": date.date().isoformat(),
+                "ticker": ticker,
+                "close": round(price, 2)
+            })
+
+    df = pd.DataFrame(all_data)
     df.to_csv(filename, index=False)
-    print(f"✅ Sample data generated in {filename}")
+    print(f"✅ Multi-ticker data written to {filename}")
 
-# Run this to generate data
+# Run this
 if __name__ == "__main__":
-    generate_sample_stock_data()
+    generate_multi_ticker_data()

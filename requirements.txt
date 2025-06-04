@@ -15,3 +15,4 @@ alembic
 requests
 numpy
 matplotlib
+httpx

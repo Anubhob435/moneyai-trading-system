@@ -18,6 +18,8 @@ import json
 import websockets
 import httpx
 from fastapi import FastAPI, Request, Response
+import sys
+from pathlib import Path
 
 # Load environment variables
 load_dotenv()
@@ -88,6 +90,35 @@ class AnalyticsRequest(BaseModel):
 
 class LambdaRequest(BaseModel):
     date: str
+
+class AlgorithmRequest(BaseModel):
+    csv_path: str = Field(..., description="Path to the CSV file containing ticker data")
+    initial_cash: Optional[float] = Field(10000, gt=0, description="Initial cash amount for each ticker (default: 10000)")
+
+class TradeDetail(BaseModel):
+    date: str
+    action: str
+    price: float
+    shares: Optional[int] = None
+    profit: Optional[float] = None
+
+class TickerResult(BaseModel):
+    ticker: str
+    trades: List[List]  # Raw trade data
+    final_cash: float
+    profit_or_loss: float
+    trade_count: int
+
+class AlgorithmResponse(BaseModel):
+    status: str
+    csv_path: str
+    initial_cash_per_ticker: float
+    total_tickers: int
+    total_initial_investment: float
+    overall_profit_loss: float
+    overall_return_percentage: float
+    ticker_results: List[TickerResult]
+    summary: dict
 
 # Database dependency
 def get_db():
@@ -394,6 +425,103 @@ async def proxy_to_lambda(request_data: LambdaRequest):
             status_code=lambda_response.status_code,
             headers=dict(lambda_response.headers)
         )
+
+# Add the trading-algorithm directory to Python path
+TRADING_ALGO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "trading-algorithim")
+sys.path.append(TRADING_ALGO_PATH)
+
+# Import the algorithm function
+from algorithim import simulate_moving_average_strategy
+
+@app.post("/algorithm/run", response_model=AlgorithmResponse)
+async def run_trading_algorithm(request: AlgorithmRequest):
+    """
+    Run the moving average crossover trading algorithm on provided CSV data
+    
+    This endpoint accepts a CSV file path and optional initial cash amount,
+    runs the trading algorithm, and returns detailed results in JSON format.
+    """
+    try:
+        # Validate CSV file exists
+        csv_path = request.csv_path
+        if not os.path.isabs(csv_path):
+            # If relative path, make it relative to the trading-algorithm directory
+            csv_path = os.path.join(TRADING_ALGO_PATH, csv_path)
+        
+        if not os.path.exists(csv_path):
+            raise HTTPException(
+                status_code=404, 
+                detail=f"CSV file not found: {csv_path}"
+            )
+        
+        # Run the algorithm
+        all_trades, overall_profit_loss = simulate_moving_average_strategy(
+            csv_path=csv_path,
+            initial_cash=request.initial_cash
+        )
+        
+        # Process results for JSON response
+        ticker_results = []
+        total_tickers = len(all_trades)
+        total_initial_investment = total_tickers * request.initial_cash
+        
+        profitable_count = 0
+        losing_count = 0
+        neutral_count = 0
+        
+        for ticker, data in all_trades.items():
+            # Count performance categories
+            if data['profit_or_loss'] > 0:
+                profitable_count += 1
+            elif data['profit_or_loss'] < 0:
+                losing_count += 1
+            else:
+                neutral_count += 1
+            
+            ticker_result = TickerResult(
+                ticker=ticker,
+                trades=data['trades'],
+                final_cash=data['final_cash'],
+                profit_or_loss=data['profit_or_loss'],
+                trade_count=len(data['trades'])
+            )
+            ticker_results.append(ticker_result)
+        
+        # Calculate summary statistics
+        active_tickers = profitable_count + losing_count
+        win_rate = (profitable_count / active_tickers * 100) if active_tickers > 0 else 0
+        avg_return_per_active = overall_profit_loss / active_tickers if active_tickers > 0 else 0
+        
+        summary = {
+            "profitable_tickers": profitable_count,
+            "losing_tickers": losing_count,
+            "neutral_tickers": neutral_count,
+            "active_tickers": active_tickers,
+            "win_rate_percentage": round(win_rate, 2),
+            "average_return_per_active_ticker": round(avg_return_per_active, 2)
+        }
+        
+        # Build response
+        response = AlgorithmResponse(
+            status="success",
+            csv_path=csv_path,
+            initial_cash_per_ticker=request.initial_cash,
+            total_tickers=total_tickers,
+            total_initial_investment=total_initial_investment,
+            overall_profit_loss=overall_profit_loss,
+            overall_return_percentage=round((overall_profit_loss / total_initial_investment) * 100, 2),
+            ticker_results=ticker_results,
+            summary=summary
+        )
+        
+        return response
+        
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid data format: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Algorithm execution error: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
